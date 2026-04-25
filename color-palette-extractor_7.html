@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PALETTE — 色を、名前にする</title>
+<meta id="og-title"       property="og:title"       content="PALETTE">
+<meta id="og-description" property="og:description" content="画像からカラーパレットを抽出して名前をつけてシェア">
+<meta id="og-image"       property="og:image"        content="">
+<meta                     property="og:type"         content="website">
+<meta id="tw-card"  name="twitter:card"  content="summary_large_image">
+<meta id="tw-title" name="twitter:title" content="PALETTE">
+<meta id="tw-image" name="twitter:image" content="">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300;1,400&family=Jost:wght@200;300;400&family=Zen+Kurenaido&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --white:#ffffff;--off:#f7f5f1;--ink:#1a1714;--ink2:#3d3830;
+  --muted:#9a9085;--faint:#ddd8d0;--faintest:#edeae4;
+  --accent:#b89b6e;--ease:cubic-bezier(.4,0,.2,1);
+}
+html{font-size:16px}
+body{background:var(--white);color:var(--ink);font-family:'Jost',sans-serif;font-weight:300;min-height:100vh;-webkit-font-smoothing:antialiased}
+
+.hd{display:flex;align-items:center;justify-content:space-between;padding:0 56px;height:60px;border-bottom:1px solid var(--faintest);position:sticky;top:0;background:rgba(255,255,255,.96);backdrop-filter:blur(8px);z-index:100}
+.logo{font-family:'Cormorant Garamond',serif;font-size:17px;font-weight:400;letter-spacing:.4em;color:var(--ink);text-decoration:none;text-transform:uppercase}
+.logo b{color:var(--accent);font-weight:400}
+.hd-tag{font-size:10px;color:var(--muted);letter-spacing:.2em;text-transform:uppercase;font-weight:300}
+
+.wrap{max-width:1000px;margin:0 auto;padding:0 56px 120px}
+.eyebrow{font-size:9px;letter-spacing:.25em;text-transform:uppercase;color:var(--muted);font-weight:400;margin-bottom:18px;display:flex;align-items:center;gap:14px}
+.eyebrow::after{content:'';flex:1;height:1px;background:var(--faintest)}
+
+/* UPLOAD */
+.upload-wrap{padding:64px 0 0}
+.drop-zone{border:1px solid var(--faint);background:var(--off);position:relative;cursor:pointer;overflow:hidden;aspect-ratio:16/6.5;display:flex;flex-direction:column;align-items:center;justify-content:center;transition:border-color .2s var(--ease),background .2s var(--ease)}
+.drop-zone:hover,.drop-zone.drag{border-color:var(--ink);background:var(--faintest)}
+.drop-zone.loaded{aspect-ratio:unset;min-height:260px;max-height:420px;background:#111}
+.drop-zone input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;z-index:2}
+.drop-inner{text-align:center;position:relative;z-index:1}
+.drop-icon{width:44px;height:44px;border-radius:50%;border:1px solid var(--faint);display:flex;align-items:center;justify-content:center;margin:0 auto 20px;color:var(--muted)}
+.drop-title{font-family:'Cormorant Garamond',serif;font-size:30px;font-weight:300;font-style:italic;color:var(--ink);margin-bottom:8px}
+.drop-sub{font-size:10px;letter-spacing:.18em;color:var(--muted);text-transform:uppercase}
+#imgEl{width:100%;height:100%;object-fit:cover;display:none;opacity:.92}
+.img-bar{position:absolute;bottom:0;left:0;right:0;background:linear-gradient(transparent,rgba(0,0,0,.5));padding:10px 16px;display:none;justify-content:space-between;z-index:3;pointer-events:none}
+.img-bar-text{font-size:9px;color:rgba(255,255,255,.6);letter-spacing:.15em;text-transform:uppercase}
+
+.ctrl-bar{display:flex;align-items:stretch;border:1px solid var(--faint);border-top:none;background:var(--white)}
+.ctrl-seg{display:flex;align-items:center;gap:16px;padding:12px 24px;border-right:1px solid var(--faint);flex:1}
+.ctrl-seg:last-child{flex:none;border-right:none;padding:0}
+.ctrl-lbl{font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);white-space:nowrap;font-weight:400}
+.ctrl-range{flex:1;-webkit-appearance:none;height:1px;background:var(--faint);outline:none;cursor:pointer}
+.ctrl-range::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;border-radius:50%;background:var(--ink);cursor:pointer}
+.ctrl-num{font-size:12px;color:var(--ink);min-width:18px;text-align:right;font-weight:400}
+.btn-run{background:var(--ink);color:var(--white);border:none;padding:0 36px;height:48px;font-family:'Jost',sans-serif;font-size:10px;letter-spacing:.2em;text-transform:uppercase;cursor:pointer;transition:background .2s var(--ease);white-space:nowrap;font-weight:400}
+.btn-run:hover{background:var(--ink2)}
+.btn-run:disabled{background:var(--faintest);color:var(--muted);cursor:not-allowed}
+
+.prog{height:1px;background:var(--faintest);display:none;overflow:hidden}
+.prog-fill{height:100%;background:var(--ink);width:0%;transition:width .5s var(--ease)}
+.ai-load{display:none;padding:48px 0;text-align:center}
+.ai-load-txt{font-size:10px;letter-spacing:.28em;text-transform:uppercase;color:var(--muted);animation:blink 2s ease infinite}
+@keyframes blink{0%,100%{opacity:.2}50%{opacity:1}}
+
+/* PALETTE */
+.pal-sec{display:none;animation:up .6s var(--ease) both}
+@keyframes up{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+
+.name-area{padding:60px 0 44px;border-bottom:1px solid var(--faintest)}
+.name-row{display:flex;align-items:flex-end;gap:32px}
+.name-field{flex:1}
+.name-lbl{font-size:9px;letter-spacing:.22em;text-transform:uppercase;color:var(--muted);font-weight:400;display:block;margin-bottom:12px}
+.name-inp{font-family:'Cormorant Garamond',serif;font-size:54px;font-weight:300;font-style:italic;color:var(--ink);background:transparent;border:none;border-bottom:1px solid var(--faint);outline:none;width:100%;padding-bottom:4px;transition:border-color .2s;line-height:1;letter-spacing:-.01em}
+.name-inp:focus{border-bottom-color:var(--ink)}
+.name-inp::placeholder{color:var(--faint)}
+.n-badge{font-family:'Cormorant Garamond',serif;font-size:88px;font-weight:300;color:var(--faintest);line-height:1;user-select:none;flex-shrink:0}
+
+.strip-sec{margin-top:44px}
+.strip{display:flex;height:72px;border:1px solid var(--faintest)}
+.strip-cell{flex:1;transition:flex .3s var(--ease);cursor:default}
+.strip-cell:hover{flex:3}
+
+.sw-sec{margin-top:56px}
+.sw-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:1px;background:var(--faintest);border:1px solid var(--faintest);margin-top:20px}
+.sw-card{background:var(--white);transition:background .15s}
+.sw-card:hover{background:var(--off)}
+.sw-color{height:116px;position:relative;overflow:hidden}
+.sw-copy{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .2s;cursor:pointer;border:none;background:transparent;width:100%}
+.sw-copy:hover{opacity:1}
+.sw-copy-lbl{background:rgba(255,255,255,.9);backdrop-filter:blur(4px);font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink);padding:5px 12px;font-family:'Jost',sans-serif;font-weight:400}
+.sw-wairo-badge{position:absolute;bottom:8px;left:10px;pointer-events:none;line-height:1}
+.sw-wairo-name{display:block;font-family:'Hiragino Mincho ProN','Yu Mincho','Noto Serif JP',Georgia,serif;font-size:15px;font-weight:600;color:#fff;text-shadow:0 1px 8px rgba(0,0,0,.6),0 0 2px rgba(0,0,0,.4);letter-spacing:.05em}
+.sw-wairo-yomi{display:block;font-size:9px;font-weight:300;color:rgba(255,255,255,.75);letter-spacing:.12em;margin-top:3px;text-shadow:0 1px 4px rgba(0,0,0,.5);font-family:'Jost',sans-serif}
+.sw-info{padding:12px 14px 16px;border-top:1px solid var(--faintest)}
+.sw-en{font-family:'Cormorant Garamond',serif;font-size:16px;font-weight:400;font-style:italic;color:var(--ink);background:transparent;border:none;outline:none;width:100%;padding:0 0 2px;border-bottom:1px solid transparent;transition:border-color .2s;line-height:1.3}
+.sw-en:focus{border-bottom-color:var(--faint)}
+.sw-ja{font-size:10px;color:var(--accent);background:transparent;border:none;outline:none;width:100%;padding:5px 0 2px;border-bottom:1px solid transparent;font-family:'Jost',sans-serif;font-weight:300;letter-spacing:.06em;transition:border-color .2s;display:block}
+.sw-ja:focus{border-bottom-color:var(--faint)}
+.sw-hex{font-size:9px;color:var(--muted);letter-spacing:.1em;margin-top:8px;font-family:monospace;display:block}
+.tone-pill{display:inline-block;font-size:8px;letter-spacing:.14em;text-transform:uppercase;padding:2px 7px;margin-top:6px;font-weight:400;border:1px solid currentColor}
+.tw{color:#c8643c}.tc{color:#3a6070}.tn{color:var(--muted)}
+
+.act-sec{margin-top:64px;padding-top:28px;border-top:1px solid var(--faintest);display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.btn{font-family:'Jost',sans-serif;font-size:9px;letter-spacing:.18em;text-transform:uppercase;border:1px solid var(--faint);background:transparent;color:var(--muted);padding:11px 22px;cursor:pointer;transition:all .2s var(--ease);font-weight:400}
+.btn:hover{border-color:var(--ink);color:var(--ink)}
+.btn-p{background:var(--ink);border-color:var(--ink);color:var(--white)}
+.btn-p:hover{background:var(--ink2);border-color:var(--ink2);color:var(--white)}
+
+.ogp-sec{display:none;margin-top:32px;animation:up .4s var(--ease) both}
+.sub-lbl{font-size:9px;letter-spacing:.22em;text-transform:uppercase;color:var(--muted);margin-bottom:14px;font-weight:400;display:flex;align-items:center;gap:12px}
+.sub-lbl::after{content:'';flex:1;height:1px;background:var(--faintest)}
+#ogpCanvas{width:100%;height:auto;display:block;border:1px solid var(--faintest)}
+
+.share-sec{display:none;margin-top:24px;animation:up .4s var(--ease) both}
+.share-row{display:flex;border:1px solid var(--faint)}
+.share-inp{flex:1;border:none;background:var(--off);color:var(--ink2);font-family:'Jost',sans-serif;font-size:11px;padding:12px 18px;outline:none;letter-spacing:.03em;font-weight:300}
+.share-btn{font-family:'Jost',sans-serif;font-size:9px;letter-spacing:.16em;text-transform:uppercase;background:var(--ink);border:none;color:var(--white);padding:0 24px;cursor:pointer;transition:background .2s;font-weight:400;white-space:nowrap}
+.share-btn:hover{background:var(--ink2)}
+.share-note{font-size:10px;color:var(--muted);margin-top:10px;letter-spacing:.04em;line-height:1.8}
+
+.css-out{display:none;margin-top:20px;background:var(--off);border:1px solid var(--faintest);padding:20px 24px;font-size:11px;color:var(--ink2);line-height:2;letter-spacing:.04em;white-space:pre-wrap;word-break:break-all;font-family:monospace;animation:up .3s var(--ease) both}
+
+.toast{position:fixed;bottom:32px;left:50%;transform:translateX(-50%) translateY(12px);background:var(--ink);color:var(--white);font-size:10px;letter-spacing:.14em;text-transform:uppercase;padding:11px 28px;pointer-events:none;opacity:0;transition:all .3s var(--ease);z-index:999;font-weight:400}
+.toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+
+.ft{padding:28px 56px;border-top:1px solid var(--faintest);display:flex;justify-content:space-between;align-items:center}
+.ft-l{font-family:'Cormorant Garamond',serif;font-size:13px;font-style:italic;color:var(--muted)}
+.ft-r{font-size:9px;letter-spacing:.18em;color:var(--faint);text-transform:uppercase}
+
+@media(max-width:640px){
+  .hd,.ft{padding:0 20px}
+  .wrap{padding:0 20px 80px}
+  .name-inp{font-size:36px}
+  .n-badge{font-size:60px}
+  .ctrl-bar{flex-direction:column}
+  .ctrl-seg{border-right:none;border-bottom:1px solid var(--faint)}
+  .btn-run{height:46px;width:100%}
+}
+</style>
+</head>
+<body>
+
+<header class="hd">
+  <a href="#" class="logo">P<b>·</b>ALETTE</a>
+  <span class="hd-tag">色を、名前にする</span>
+</header>
+
+<div class="wrap">
+  <section class="upload-wrap">
+    <div class="eyebrow">01 — 画像をアップロード</div>
+    <div class="drop-zone" id="dropZone">
+      <input type="file" id="fileInp" accept="image/*">
+      <div class="drop-inner" id="dropInner">
+        <div class="drop-icon">
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+            <path d="M9 12V4M9 4L6 7M9 4L12 7" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M3 14h12" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <div class="drop-title">画像をドロップ</div>
+        <div class="drop-sub" style="margin-top:8px">JPG · PNG · WEBP</div>
+      </div>
+      <img id="imgEl" src="" alt="">
+      <div class="img-bar" id="imgBar">
+        <span class="img-bar-text">Source image</span>
+        <span class="img-bar-text" id="imgName"></span>
+      </div>
+    </div>
+    <div class="ctrl-bar">
+      <div class="ctrl-seg">
+        <span class="ctrl-lbl">抽出する色数</span>
+        <input type="range" class="ctrl-range" id="nSlider" min="4" max="16" value="10" step="1">
+        <span class="ctrl-num" id="nVal">10</span>
+      </div>
+      <div class="ctrl-seg">
+        <button class="btn-run" id="runBtn" disabled>抽出 &amp; 命名 →</button>
+      </div>
+    </div>
+    <div class="prog" id="prog"><div class="prog-fill" id="progFill"></div></div>
+    <div class="ai-load" id="aiLoad"><p class="ai-load-txt">色に、名前をつけています</p></div>
+  </section>
+
+  <section class="pal-sec" id="palSec">
+    <div class="name-area">
+      <div class="name-row">
+        <div class="name-field">
+          <label class="name-lbl" for="palName">02 — パレットに名前をつける</label>
+          <input class="name-inp" id="palName" type="text" placeholder="名前を入力…" maxlength="40">
+        </div>
+        <div class="n-badge" id="nBadge">10</div>
+      </div>
+    </div>
+
+    <div class="strip-sec">
+      <div class="eyebrow" style="margin-top:40px">03 — カラーストリップ</div>
+      <div class="strip" id="strip"></div>
+    </div>
+
+    <div class="sw-sec">
+      <div class="eyebrow">04 — スウォッチ（名前を編集できます）</div>
+      <div class="sw-grid" id="swGrid"></div>
+    </div>
+
+    <div class="act-sec">
+      <button class="btn" id="btnCss">CSS変数をコピー</button>
+      <button class="btn" id="btnJson">JSONをダウンロード</button>
+      <button class="btn btn-p" id="btnShare">シェア画像を生成 →</button>
+    </div>
+
+    <div class="css-out" id="cssOut"></div>
+
+    <div class="ogp-sec" id="ogpSec">
+      <div class="sub-lbl">OGP CARD — 1200 × 840</div>
+      <canvas id="ogpCanvas"></canvas>
+    </div>
+
+    <div class="share-sec" id="shareSec">
+      <div class="sub-lbl">SHARE URL</div>
+      <div class="share-row">
+        <input class="share-inp" id="shareInp" type="text" readonly>
+        <button class="share-btn" id="btnCopyUrl">コピー</button>
+      </div>
+      <p class="share-note">※ このURLを開くと同じパレットが復元されます。</p>
+    </div>
+  </section>
+</div>
+
+<footer class="ft">
+  <span class="ft-l">色を、名前にする。</span>
+  <span class="ft-r">Palette Extractor v4</span>
+</footer>
+
+<div class="toast" id="toast"></div>
+
+<script>
+let img0 = null, imgDataUrl = null, colors = [];
+
+// ── UPLOAD ────────────────────────────────────────────────
+const dz = document.getElementById('dropZone');
+const fi = document.getElementById('fileInp');
+const rb = document.getElementById('runBtn');
+const ns = document.getElementById('nSlider');
+const nv = document.getElementById('nVal');
+
+ns.addEventListener('input', () => nv.textContent = ns.value);
+dz.addEventListener('dragover',  e => { e.preventDefault(); dz.classList.add('drag'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('drag'));
+dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('drag'); const f=e.dataTransfer.files[0]; if(f&&f.type.startsWith('image/')) load(f); });
+fi.addEventListener('change', e => { if(e.target.files[0]) load(e.target.files[0]); });
+
+function load(file) {
+  const r = new FileReader();
+  r.onload = e => {
+    imgDataUrl = e.target.result;
+    const el = document.getElementById('imgEl');
+    el.src = imgDataUrl;
+    el.onload = () => {
+      img0 = el; el.style.display = 'block';
+      document.getElementById('dropInner').style.display = 'none';
+      document.getElementById('imgBar').style.display = 'flex';
+      document.getElementById('imgName').textContent = file.name;
+      dz.classList.add('loaded'); rb.disabled = false;
+    };
+  };
+  r.readAsDataURL(file);
+}
+
+// ── EXTRACT ───────────────────────────────────────────────
+rb.addEventListener('click', async () => {
+  if (!img0) return;
+  rb.disabled = true;
+  progStart();
+  const hexes = await extract(img0, parseInt(ns.value));
+  progEnd();
+  await nameIt(hexes);
+  rb.disabled = false;
+});
+
+function progStart() {
+  const p=document.getElementById('prog'),f=document.getElementById('progFill');
+  p.style.display='block'; f.style.width='0%';
+  requestAnimationFrame(()=>{ f.style.width='75%'; });
+}
+function progEnd() {
+  document.getElementById('progFill').style.width='100%';
+  setTimeout(()=>document.getElementById('prog').style.display='none', 400);
+}
+
+async function extract(img, k) {
+  return new Promise(res => {
+    const c=document.createElement('canvas'); c.width=c.height=220;
+    const ctx=c.getContext('2d'); ctx.drawImage(img,0,0,220,220);
+    const d=ctx.getImageData(0,0,220,220).data;
+    const px=[];
+    for(let i=0;i<d.length;i+=4){
+      if(d[i+3]<128)continue;
+      const l=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2];
+      if(l<8||l>247)continue;
+      px.push([d[i],d[i+1],d[i+2]]);
+    }
+    const step=Math.max(1,Math.floor(px.length/2500));
+    const s=px.filter((_,i)=>i%step===0);
+    const cen=kmeans(s,k,25);
+    const hex=cen.map(c=>'#'+[0,1,2].map(i=>Math.round(c[i]).toString(16).padStart(2,'0')).join(''));
+    res(hex.sort((a,b)=>lum(b)-lum(a)));
+  });
+}
+
+function kmeans(data,k,maxIt){
+  let cen=Array.from({length:k},(_,i)=>data[Math.floor(i/k*data.length)].slice());
+  let asgn=new Array(data.length).fill(0);
+  for(let it=0;it<maxIt;it++){
+    let ch=false;
+    for(let i=0;i<data.length;i++){
+      let best=0,bd=Infinity;
+      for(let j=0;j<k;j++){const d=(data[i][0]-cen[j][0])**2+(data[i][1]-cen[j][1])**2+(data[i][2]-cen[j][2])**2;if(d<bd){bd=d;best=j;}}
+      if(asgn[i]!==best){asgn[i]=best;ch=true;}
+    }
+    if(!ch)break;
+    const sum=Array.from({length:k},()=>[0,0,0,0]);
+    for(let i=0;i<data.length;i++){const c=asgn[i];sum[c][0]+=data[i][0];sum[c][1]+=data[i][1];sum[c][2]+=data[i][2];sum[c][3]++;}
+    cen=sum.map((x,j)=>x[3]>0?[x[0]/x[3],x[1]/x[3],x[2]/x[3]]:cen[j]);
+  }
+  return cen;
+}
+
+function lum(hex){const[r,g,b]=rgb(hex);return 0.299*r+0.587*g+0.114*b;}
+function rgb(hex){return[parseInt(hex.slice(1,3),16),parseInt(hex.slice(3,5),16),parseInt(hex.slice(5,7),16)];}
+function hsl(hex){
+  let[r,g,b]=rgb(hex);r/=255;g/=255;b/=255;
+  const mx=Math.max(r,g,b),mn=Math.min(r,g,b);
+  let h=0,s=0,l=(mx+mn)/2;
+  if(mx!==mn){const d=mx-mn;s=l>.5?d/(2-mx-mn):d/(mx+mn);
+    if(mx===r)h=(g-b)/d+(g<b?6:0); else if(mx===g)h=(b-r)/d+2; else h=(r-g)/d+4; h*=60;}
+  return[h,s,l];
+}
+function tone(hex){const[h,s]=hsl(hex);if(s<.12)return'neutral';if((h>=0&&h<=55)||h>330)return'warm';if(h>160&&h<=310)return'cool';return'neutral';}
+
+// ── NAMING ────────────────────────────────────────────────
+async function nameIt(hexes) {
+  document.getElementById('aiLoad').style.display='block';
+  document.getElementById('palSec').style.display='none';
+
+  const prompt=`You are a poetic color naming expert with deep knowledge of Japanese aesthetics and cinema.
+Given these HEX colors, name each one beautifully.
+Colors: ${JSON.stringify(hexes)}
+
+Return ONLY raw JSON array, no markdown:
+[{"hex":"#xxxxxx","name_en":"Poetic Name","name_ja":"日本語名","mood":"3 word mood"}]
+
+- name_en: cinematic, 2-3 words (e.g. "Rusted Copper","Pale Dusk","Antique Ivory")
+- name_ja: evocative Japanese color (e.g. "朽葉色","空色","鈍色","茜色")
+- mood: exactly 3 English words
+- Return exactly ${hexes.length} items in order`;
+
+  try {
+    const res=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,messages:[{role:'user',content:prompt}]})
+    });
+    const data=await res.json();
+    const txt=data.content.map(i=>i.text||'').join('').replace(/```json|```/g,'').trim();
+    const parsed=JSON.parse(txt);
+    colors=parsed.map((x,i)=>({hex:hexes[i]||x.hex,name_en:x.name_en||`Color ${i+1}`,name_ja:x.name_ja||'',mood:x.mood||'',tone:tone(hexes[i]||x.hex)}));
+  } catch {
+    colors=hexes.map((h,i)=>({hex:h,name_en:`Color ${i+1}`,name_ja:'',mood:'',tone:tone(h)}));
+  }
+  document.getElementById('aiLoad').style.display='none';
+  render();
+}
+
+// ── 和色データベース（465色 from colordic.org/w） ─────────
+const WAIRO = [
+  ['桜色','さくらいろ','#fef4f4'],['薄桜','うすざくら','#fdeff2'],['桜鼠','さくらねず','#e9dfe5'],
+  ['鴇鼠','ときねず','#e4d2d8'],['虹色','にじいろ','#f6bfbc'],['珊瑚色','さんごいろ','#f5b1aa'],
+  ['一斤染','いっこんぞめ','#f5b199'],['宍色','ししいろ','#efab93'],['紅梅色','こうばいいろ','#f2a0a1'],
+  ['薄紅','うすべに','#f0908d'],['桃色','ももいろ','#f09199'],['撫子色','なでしこいろ','#e597b2'],
+  ['桃花色','ももはないろ','#f4b3c2'],['鴇色','ときいろ','#f2a0be'],['薄紅梅','うすこうばい','#ec8ea0'],
+  ['紅梅','こうばい','#cf9aad'],['牡丹色','ぼたんいろ','#c67da8'],['撫子','なでしこ','#dd7198'],
+  ['薔薇色','ばらいろ','#e95295'],['紅色','べにいろ','#e83929'],['薄紅色','うすくれない','#f2b4c0'],
+  ['深緋','こきひ','#b5495b'],['茜色','あかねいろ','#c0392b'],['赤','あか','#e83929'],
+  ['紅','くれない','#d3381c'],['緋色','ひいろ','#e83929'],['猩々緋','しょうじょうひ','#bb2528'],
+  ['小豆色','あずきいろ','#96514d'],['枯茶','からちゃ','#8d6449'],['飴色','あめいろ','#deb068'],
+  ['駱駝色','らくだいろ','#bf794e'],['土色','つちいろ','#bc763c'],['黄唐茶','きがらちゃ','#b98c46'],
+  ['桑染','くわぞめ','#b79b5b'],['檀色','はじいろ','#b77b57'],['黄橡','きつるばみ','#b68d4c'],
+  ['丁字染','ちょうじぞめ','#ad7d4c'],['黄土色','おうどいろ','#c89932'],['茶色','ちゃいろ','#9b6034'],
+  ['弁柄色','べんがらいろ','#9f563a'],['煉瓦色','れんがいろ','#b55233'],['焦茶','こげちゃ','#6b3a2a'],
+  ['栗色','くりいろ','#762f07'],['赤茶','あかちゃ','#b55233'],['錆色','さびいろ','#8a3b2a'],
+  ['黄金','こがね','#e6b422'],['山吹色','やまぶきいろ','#f6ad3c'],['橙色','だいだいいろ','#f08300'],
+  ['蜜柑色','みかんいろ','#f39800'],['柿色','かきいろ','#ed6d3d'],['朱色','しゅいろ','#ed541d'],
+  ['丹色','にいろ','#e45c3a'],['黄色','きいろ','#ffd900'],['菜の花色','なのはないろ','#f5d800'],
+  ['黄檗色','きはだいろ','#f4e04d'],['鬱金色','うこんいろ','#e8a217'],['芥子色','からしいろ','#d0af4c'],
+  ['山吹茶','やまぶきちゃ','#c89932'],['盧染','はじぞめ','#d9a62e'],['黄朽葉色','きくちばいろ','#d3a243'],
+  ['麹塵','きくじん','#6e7955'],['山鳩色','やまばといろ','#767c6b'],['利休鼠','りきゅうねずみ','#888e7e'],
+  ['海松茶','みるちゃ','#5a544b'],['若草色','わかくさいろ','#a8c97f'],['草色','くさいろ','#7b8d42'],
+  ['萌黄色','もえぎいろ','#82ae46'],['鶸色','ひわいろ','#c3d825'],['苔色','こけいろ','#6b6f3a'],
+  ['松葉色','まつばいろ','#5b7a39'],['常磐色','ときわいろ','#007b43'],['緑','みどり','#00a040'],
+  ['萌葱色','もえぎいろ','#006e54'],['花緑青','はなろくしょう','#00a381'],['翡翠色','ひすいいろ','#38b48b'],
+  ['青緑','あおみどり','#00a497'],['水浅葱','みずあさぎ','#80aba9'],['錆浅葱','さびあさぎ','#5c9291'],
+  ['青碧','せいへき','#478384'],['御召茶','おめしちゃ','#43676b'],['湊鼠','みなとねずみ','#80989b'],
+  ['高麗納戸','こうらいなんど','#2c4f54'],['納戸色','なんどいろ','#006171'],['浅葱色','あさぎいろ','#00a3af'],
+  ['縹色','はなだいろ','#1e88a8'],['水色','みずいろ','#81c7d4'],['空色','そらいろ','#7db9de'],
+  ['薄藍','うすあい','#84b9cb'],['藍色','あいいろ','#165e83'],['群青色','ぐんじょういろ','#1f4391'],
+  ['瑠璃色','るりいろ','#1e50a2'],['瑠璃紺','るりこん','#2a4073'],['紺色','こんいろ','#17184b'],
+  ['紺青','こんじょう','#003f8e'],['青藤','あおふじ','#8491c3'],['藤色','ふじいろ','#8b81c3'],
+  ['藤紫','ふじむらさき','#8a6bb1'],['菫色','すみれいろ','#6a4e9c'],['青紫','あおむらさき','#6e4b9e'],
+  ['紫','むらさき','#7b4f9e'],['江戸紫','えどむらさき','#6f3b7e'],['古代紫','こだいむらさき','#895b8a'],
+  ['茄子紺','なすこん','#824880'],['二藍','ふたあい','#915c8b'],['京紫','きょうむらさき','#9d5b8b'],
+  ['蒲葡','えびぞめ','#7a4171'],['若紫','わかむらさき','#bc64a4'],['紅紫','べにむらさき','#b44c97'],
+  ['梅紫','うめむらさき','#aa4c8f'],['菖蒲色','あやめいろ','#cc7eb1'],['紅藤色','べにふじいろ','#cca6bf'],
+  ['牡丹','ぼたん','#c0449c'],['赤紫','あかむらさき','#b13b77'],['蘇芳色','すおういろ','#9e3d3f'],
+  ['葡萄色','えびいろ','#6c2c2f'],['鉛色','なまりいろ','#808080'],['銀鼠','ぎんねず','#aaaaaa'],
+  ['白鼠','しろねず','#d3d3d3'],['灰色','はいいろ','#9b9b9b'],['利休色','りきゅういろ','#89916b'],
+  ['柳鼠','やなぎねず','#b1b479'],['白','しろ','#ffffff'],['黒','くろ','#000000'],
+  ['漆黒','しっこく','#1c1c1c'],['墨色','すみいろ','#595857'],['鈍色','にびいろ','#757575'],
+  ['象牙色','ぞうげいろ','#faf3dc'],['乳白色','にゅうはくしょく','#f8f4e6'],['生成色','きなりいろ','#f3f0e0'],
+  ['砂色','すないろ','#b19d7d'],['小麦色','こむぎいろ','#c8a26e'],['肌色','はだいろ','#f6d5a0'],
+];
+
+// ── 和色マッチング ─────────────────────────────────────────
+function findNearestWairo(hex) {
+  const [r1,g1,b1] = rgb(hex);
+  let best = WAIRO[0], bestDist = Infinity;
+  for (const w of WAIRO) {
+    const [r2,g2,b2] = rgb(w[2]);
+    // LAB-like weighted distance for perceptual accuracy
+    const dr = (r1-r2)*0.299, dg = (g1-g2)*0.587, db = (b1-b2)*0.114;
+    const d = dr*dr + dg*dg + db*db;
+    if (d < bestDist) { bestDist = d; best = w; }
+  }
+  return { name: best[0], yomi: best[1], hex: best[2] };
+}
+
+// ── RENDER UI ─────────────────────────────────────────────
+function render() {
+  const n=colors.length;
+  document.getElementById('nBadge').textContent=n;
+
+  const strip=document.getElementById('strip');
+  strip.innerHTML='';
+  colors.forEach(c=>{
+    const d=document.createElement('div');
+    d.className='strip-cell';d.style.background=c.hex;d.title=`${c.name_en} · ${c.hex}`;
+    strip.appendChild(d);
+  });
+
+  const grid=document.getElementById('swGrid');
+  grid.innerHTML='';
+  colors.forEach((c,i)=>{
+    const el=document.createElement('div');el.className='sw-card';
+    const tc={warm:'tw',cool:'tc',neutral:'tn'}[c.tone]||'tn';
+    const w = findNearestWairo(c.hex);   // ← 和色マッチ
+    el.innerHTML=`
+      <div class="sw-color" style="background:${c.hex}">
+        <button class="sw-copy" data-h="${c.hex}">
+          <span class="sw-copy-lbl">COPY ${c.hex.toUpperCase()}</span>
+        </button>
+        <div class="sw-wairo-badge">
+          <span class="sw-wairo-name">${w.name}</span>
+          <span class="sw-wairo-yomi">${w.yomi}</span>
+        </div>
+      </div>
+      <div class="sw-info">
+        <input class="sw-en" type="text" value="${c.name_en}" data-i="${i}" data-f="name_en" maxlength="28">
+        <input class="sw-ja" type="text" value="${c.name_ja}" data-i="${i}" data-f="name_ja" maxlength="8">
+        <span class="sw-hex">${c.hex.toUpperCase()}</span>
+        <span class="tone-pill ${tc}">${c.tone}</span>
+      </div>`;
+    grid.appendChild(el);
+    // store wairo in color state
+    colors[i].wairo_name = w.name;
+    colors[i].wairo_yomi = w.yomi;
+  });
+
+  grid.querySelectorAll('.sw-copy').forEach(b=>{
+    b.addEventListener('click',e=>{e.stopPropagation();navigator.clipboard.writeText(b.dataset.h);toast(b.dataset.h.toUpperCase()+' をコピー');});
+  });
+  grid.querySelectorAll('input[data-i]').forEach(inp=>{
+    inp.addEventListener('input',e=>{colors[+e.target.dataset.i][e.target.dataset.f]=e.target.value;});
+  });
+
+  document.getElementById('palSec').style.display='block';
+  document.getElementById('palSec').scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+// ── CSS ───────────────────────────────────────────────────
+document.getElementById('btnCss').addEventListener('click',()=>{
+  const name=document.getElementById('palName').value||'palette';
+  const slug=name.toLowerCase().replace(/\s+/g,'-').replace(/[^\w-]/g,'');
+  let css=`:root {\n  /* ${name} */\n`;
+  colors.forEach((c,i)=>{css+=`  --${slug}-${String(i+1).padStart(2,'0')}: ${c.hex.toUpperCase()}; /* ${c.name_en} ${c.name_ja} */\n`;});
+  css+='}';
+  document.getElementById('cssOut').textContent=css;
+  document.getElementById('cssOut').style.display='block';
+  navigator.clipboard.writeText(css);
+  toast('CSS変数をコピーしました');
+});
+
+// ── JSON ──────────────────────────────────────────────────
+document.getElementById('btnJson').addEventListener('click',()=>{
+  const name=document.getElementById('palName').value||'Untitled';
+  const data=JSON.stringify({name,created:new Date().toISOString(),colors:colors.map(c=>{
+    const[r,g,b]=rgb(c.hex);const[h,s,l]=hsl(c.hex);
+    return{hex:c.hex.toUpperCase(),name_en:c.name_en,name_ja:c.name_ja,mood:c.mood,tone:c.tone,rgb:{r,g,b},hsl:{h:Math.round(h),s:Math.round(s*100),l:Math.round(l*100)}};
+  })},null,2);
+  const a=Object.assign(document.createElement('a'),{
+    href:URL.createObjectURL(new Blob([data],{type:'application/json'})),
+    download:(name.replace(/\s+/g,'_')||'palette')+'.json'
+  });
+  a.click();
+  toast('JSONをダウンロードしました');
+});
+
+// ── OGP GENERATION ───────────────────────────────────────
+// Layout:
+//   [  source image fills 100% width, ~68% height  ]
+//   [ bottom gradient overlay with palette name     ]
+//   [ white zone: swatches + hex + ja names         ]
+document.getElementById('btnShare').addEventListener('click', genOgp);
+
+function genOgp() {
+  if (!colors.length) return;
+  const palName = document.getElementById('palName').value || 'Untitled Palette';
+
+  // 1200 × 840  (standard OGP 1.91:1 ≈ 1200×628, but taller for image+swatches)
+  const W = 1200, H = 840;
+  const cv = document.getElementById('ogpCanvas');
+  cv.width = W; cv.height = H;
+  const ctx = cv.getContext('2d');
+  const n = colors.length;
+
+  // Zone heights
+  const IMG_H    = 540;
+  const PAL_H    = H - IMG_H;  // 300px — 3行ラベル用
+  const SW_H     = Math.round(PAL_H * 0.50);  // swatch block
+  const SW_Y     = IMG_H;
+  const SW_W     = W / n;
+
+  // ── STEP 1: draw source image (or black bg) ──────────
+  // 手書きフォントをCanvas用にプリロード
+  const handFont = new FontFace('ZenKurenaido', 'url(https://fonts.gstatic.com/s/zenkurenaido/v12/1cXqaULGBpDqfoqkNcKoTILrHbA.woff2)');
+  handFont.load().catch(()=>{}).finally(() => {
+    try { document.fonts.add(handFont); } catch(e) {}
+    paintInner();
+  });
+
+  const paint = () => { paintInner(); };
+
+  function paintInner() {
+    // ── STEP 2: dark gradient top of image ──────────────
+    const gradTop = ctx.createLinearGradient(0, 0, 0, 220);
+    gradTop.addColorStop(0, 'rgba(0,0,0,0.78)');
+    gradTop.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = gradTop;
+    ctx.fillRect(0, 0, W, 220);
+
+    // ── STEP 3: App label ────────────────────────────────
+    ctx.textAlign = 'left';
+    ctx.font = '400 13px "Helvetica Neue", Arial, sans-serif';
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.fillText('P·ALETTE', 52, 44);
+
+    // ── 作成日 — top right ────────────────────────────────
+    const now = new Date();
+    const dateStr = `${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}/${String(now.getDate()).padStart(2,'0')}`;
+    ctx.textAlign = 'right';
+    ctx.font = '300 15px "Helvetica Neue", Arial, sans-serif';
+    ctx.fillStyle = 'rgba(255,255,255,0.65)';
+    ctx.fillText(dateStr, W - 52, 44);
+
+    // ── Big palette name — handwriting font ──────────────
+    ctx.textAlign = 'left';
+    ctx.shadowColor = 'rgba(0,0,0,0.55)';
+    ctx.shadowBlur   = 32;
+    ctx.shadowOffsetY = 3;
+
+    // Try Zen Kurenaido first, fallback to system handwriting fonts
+    const fontStack = '"ZenKurenaido", "Zen Kurenaido", "UD Digi Kyokasho N-R", "Hiragino Maru Gothic ProN", cursive';
+    ctx.font = `400 76px ${fontStack}`;
+    ctx.fillStyle = '#ffffff';
+
+    // Measure and truncate
+    let displayName = palName;
+    while (ctx.measureText(displayName).width > W - 120 && displayName.length > 3) {
+      displayName = displayName.slice(0, -1);
+    }
+    if (displayName !== palName) displayName += '…';
+    ctx.fillText(displayName, 52, 128);
+
+    ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
+
+    // ── STEP 4: white palette zone ───────────────────────
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, IMG_H, W, PAL_H);
+
+    // ── STEP 5: swatch blocks ────────────────────────────
+    colors.forEach((c, i) => {
+      const x = Math.round(i * SW_W);
+      const w = Math.round((i+1)*SW_W) - x;
+      ctx.fillStyle = c.hex;
+      ctx.fillRect(x, SW_Y, w, SW_H);
+    });
+
+    // ── STEP 6: labels — hex / 和色名(大) / よみがな(大) ──
+    const labelTop = SW_Y + SW_H;
+    const labelH   = PAL_H - SW_H;
+    const rowHex   = labelTop + labelH * 0.22;
+    const rowKanji = labelTop + labelH * 0.52;
+    const rowYomi  = labelTop + labelH * 0.82;
+
+    ctx.textAlign = 'center';
+    colors.forEach((c, i) => {
+      const cx = Math.round(i * SW_W) + SW_W / 2;
+
+      // HEX — monospace bold
+      ctx.font = '700 11px "Helvetica Neue", Arial, monospace';
+      ctx.fillStyle = '#5a5550';
+      ctx.fillText(c.hex.toUpperCase(), cx, rowHex);
+
+      // 和色名 — larger bold serif (修正③)
+      const wName = c.wairo_name || c.name_ja || c.name_en;
+      const wYomi = c.wairo_yomi || '';
+      ctx.font = '700 17px "Hiragino Mincho ProN", "Yu Mincho", "Noto Serif JP", Georgia, serif';
+      ctx.fillStyle = '#1a1714';
+      ctx.fillText(wName, cx, rowKanji);
+
+      // よみがな — larger (修正③)
+      if (wYomi) {
+        ctx.font = '400 12px "Hiragino Kaku Gothic ProN", "Yu Gothic", Arial, sans-serif';
+        ctx.fillStyle = '#9a9085';
+        ctx.fillText(wYomi, cx, rowYomi);
+      }
+    });
+
+    // ── STEP 7: finalize ─────────────────────────────────
+    document.getElementById('ogpSec').style.display = 'block';
+    const dataUrl = cv.toDataURL('image/png');
+
+    // OGP meta
+    document.getElementById('og-image').setAttribute('content', dataUrl);
+    document.getElementById('tw-image').setAttribute('content', dataUrl);
+    document.getElementById('og-title').setAttribute('content', palName + ' — P·ALETTE');
+    document.getElementById('tw-title').setAttribute('content', palName);
+    document.getElementById('og-description').setAttribute('content',
+      colors.slice(0,5).map(c=>c.name_en).join(', ') + ' — カラーパレット');
+
+    buildUrl();
+
+    // auto-download
+    Object.assign(document.createElement('a'),{
+      href:dataUrl,
+      download:(palName.replace(/\s+/g,'_')||'palette')+'_ogp.png'
+    }).click();
+    toast('OGP画像を保存しました');
+  };
+
+  if (imgDataUrl) {
+    const src = new Image();
+    src.onload = () => {
+      const aspect = src.width / src.height;
+      const targetA = W / IMG_H;
+      let sx=0, sy=0, sw=src.width, sh=src.height;
+      if (aspect > targetA) { sw = src.height * targetA; sx = (src.width - sw) / 2; }
+      else                  { sh = src.width / targetA;  sy = (src.height - sh) / 2; }
+      ctx.drawImage(src, sx, sy, sw, sh, 0, 0, W, IMG_H);
+      paint();
+    };
+    src.src = imgDataUrl;
+  } else {
+    ctx.fillStyle = '#1a1714';
+    ctx.fillRect(0, 0, W, IMG_H);
+    paint();
+  }
+}
+
+// ── SHARE URL ─────────────────────────────────────────────
+function buildUrl() {
+  const name=document.getElementById('palName').value||'Untitled';
+  const payload={n:name,c:colors.map(c=>[c.hex,c.name_en,c.name_ja,c.tone])};
+  const enc=btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
+  const url=`${location.origin}${location.pathname}?p=${enc}`;
+  document.getElementById('shareSec').style.display='block';
+  document.getElementById('shareInp').value=url;
+}
+document.getElementById('btnCopyUrl').addEventListener('click',()=>{
+  navigator.clipboard.writeText(document.getElementById('shareInp').value);
+  toast('URLをコピーしました');
+});
+
+// ── RESTORE FROM URL ──────────────────────────────────────
+(()=>{
+  const p=new URLSearchParams(location.search).get('p');
+  if(!p)return;
+  try{
+    const d=JSON.parse(decodeURIComponent(escape(atob(p))));
+    document.getElementById('palName').value=d.n||'';
+    colors=d.c.map(c=>({hex:c[0],name_en:c[1],name_ja:c[2],tone:c[3],mood:''}));
+    render();
+    setTimeout(()=>genOgp(),200);
+    toast('パレットを復元しました');
+  }catch{}
+})();
+
+// ── TOAST ─────────────────────────────────────────────────
+function toast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg;t.classList.add('on');
+  setTimeout(()=>t.classList.remove('on'),2600);
+}
+</script>
+</body>
+</html>
