@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SideView — SNS横並びビューア</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;500;700;800&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0a0a;--bg2:#111;--bg3:#181818;--bg4:#222;
+  --border:rgba(255,255,255,.08);--border2:rgba(255,255,255,.15);
+  --text:#f0f0f0;--text2:#888;--text3:#555;
+  --accent:#e8ff47;--accent2:#ff6b35;--accent3:#00d4aa;
+  --mono:'DM Mono',monospace;--sans:'Syne',sans-serif;
+}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--sans)}
+body{display:flex;flex-direction:column;overflow:hidden}
+
+/* ── HEADER ── */
+#header{
+  height:52px;background:var(--bg2);border-bottom:1px solid var(--border);
+  display:flex;align-items:center;padding:0 16px;gap:12px;
+  position:relative;z-index:100;flex-shrink:0;
+}
+#logo{font-size:16px;font-weight:800;letter-spacing:-.04em;white-space:nowrap}
+#logo span{color:var(--accent)}
+
+/* board selector */
+#board-selector{position:relative}
+#board-btn{
+  display:flex;align-items:center;gap:6px;background:var(--bg3);
+  border:1px solid var(--border2);color:var(--text);padding:5px 10px;
+  border-radius:6px;cursor:pointer;font-family:var(--mono);font-size:12px;white-space:nowrap;
+}
+#board-btn:hover{border-color:var(--accent)}
+#board-dropdown{
+  display:none;position:absolute;top:calc(100% + 6px);left:0;
+  background:var(--bg3);border:1px solid var(--border2);
+  border-radius:8px;min-width:220px;z-index:200;overflow:hidden;
+}
+#board-dropdown.open{display:block}
+.board-item{display:flex;align-items:center;justify-content:space-between;padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--border)}
+.board-item:hover{background:var(--bg4)}
+.board-name{font-family:var(--mono);font-size:12px}
+.board-count{font-size:11px;color:var(--text3)}
+.board-delete{background:none;border:none;color:var(--text3);cursor:pointer;padding:2px 6px;font-size:12px}
+.board-delete:hover{color:var(--accent2)}
+.board-new-btn{display:block;width:100%;padding:9px 12px;background:none;border:none;color:var(--accent);cursor:pointer;font-family:var(--mono);font-size:12px;text-align:left;border-top:1px solid var(--border)}
+.board-new-btn:hover{background:var(--bg4)}
+.spacer{flex:1}
+
+/* header buttons */
+.hbtn{
+  padding:6px 14px;border-radius:6px;font-family:var(--mono);font-size:12px;
+  cursor:pointer;white-space:nowrap;transition:all .15s;
+}
+#save-btn{background:transparent;border:1px solid var(--border2);color:var(--text2)}
+#save-btn:hover{border-color:var(--accent3);color:var(--accent3)}
+#add-btn{background:var(--accent);color:#000;font-weight:500;border:none}
+#add-btn:hover{background:#fff}
+
+/* ── BOARD TITLE BAR ── */
+#title-bar{
+  padding:10px 20px;background:var(--bg2);border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:10px;flex-shrink:0;
+}
+#board-title-input{
+  background:transparent;border:none;outline:none;
+  font-family:var(--sans);font-size:20px;font-weight:700;
+  color:var(--text);letter-spacing:-.03em;
+  width:100%;cursor:text;
+}
+#board-title-input::placeholder{color:var(--text3)}
+#board-title-input:focus{border-bottom:1px solid var(--accent);padding-bottom:1px}
+.title-edit-hint{font-size:11px;color:var(--text3);font-family:var(--mono);white-space:nowrap;flex-shrink:0}
+
+/* ── MAIN SCROLL AREA ── */
+#main{flex:1;overflow-y:auto;overflow-x:hidden;padding:20px}
+#main::-webkit-scrollbar{width:4px}
+#main::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+
+/* ── EMPTY STATE ── */
+#empty-state{
+  display:none;flex-direction:column;align-items:center;justify-content:center;
+  min-height:400px;gap:24px;
+}
+#empty-state.show{display:flex}
+.big-text{font-size:44px;font-weight:800;letter-spacing:-.04em;color:var(--text3);text-align:center;line-height:1.1}
+.big-text span{color:var(--accent)}
+.quick-chips{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+.quick-chip{
+  background:var(--bg3);border:1px solid var(--border2);color:var(--text2);
+  padding:7px 14px;border-radius:20px;font-family:var(--mono);font-size:12px;
+  cursor:pointer;transition:all .15s;
+}
+.quick-chip:hover{border-color:var(--accent);color:var(--accent)}
+
+/* ── GRID ── */
+#panels-grid{
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:14px;
+}
+@media(max-width:1200px){#panels-grid{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:860px){#panels-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:560px){#panels-grid{grid-template-columns:1fr}}
+
+/* ── PANEL CARD ── */
+.panel-card{
+  background:var(--bg2);border:1px solid var(--border);border-radius:14px;
+  overflow:hidden;display:flex;flex-direction:column;
+  animation:fadeUp .35s ease both;
+  transition:border-color .2s;
+}
+.panel-card:hover{border-color:var(--border2)}
+@keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+
+/* card header */
+.card-header{
+  display:flex;align-items:center;gap:8px;padding:10px 12px;
+  border-bottom:1px solid var(--border);flex-shrink:0;background:var(--bg3);
+}
+.sns-icon{
+  width:24px;height:24px;border-radius:5px;display:flex;align-items:center;
+  justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;
+}
+.sns-x{background:#000;color:#fff;border:1px solid #333}
+.sns-ig{background:linear-gradient(135deg,#f58529,#dd2a7b,#8134af);color:#fff}
+.sns-yt{background:#ff0000;color:#fff}
+.sns-tt{background:#010101;color:#fff}
+.sns-th{background:#1a1a1a;color:#fff;border:1px solid #333}
+.sns-note{background:#41c9b4;color:#fff}
+.sns-gen{background:var(--bg4);color:var(--text2);border:1px solid var(--border2)}
+
+.card-handle-info{flex:1;overflow:hidden}
+.card-account{font-family:var(--mono);font-size:11px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card-platform{font-size:10px;color:var(--text3);font-family:var(--mono)}
+.card-close{background:none;border:none;color:var(--text3);cursor:pointer;padding:3px 5px;font-size:13px;transition:color .15s;flex-shrink:0}
+.card-close:hover{color:var(--accent2)}
+
+/* card content — fixed height with scroll */
+.card-content{
+  height:380px;overflow-y:auto;overflow-x:hidden;
+  background:var(--bg);position:relative;
+  display:flex;flex-direction:column;
+}
+.card-content::-webkit-scrollbar{width:3px}
+.card-content::-webkit-scrollbar-thumb{background:var(--border2)}
+
+/* iframe fills content area */
+.card-content iframe{
+  flex:1;width:100%;min-height:380px;border:none;display:block;background:#fff;
+}
+
+/* Twitter embed inside card */
+.tw-inner{background:#000;padding:0;min-height:380px}
+.tw-inner .twitter-timeline{display:block}
+
+/* Instagram embed */
+.ig-wrap{padding:0;background:#fff;min-height:380px;display:flex;flex-direction:column}
+.ig-wrap blockquote.instagram-media{
+  flex:1;margin:0 !important;width:100% !important;min-width:unset !important;
+  border-radius:0 !important;border:none !important;
+}
+
+/* Fallback */
+.fallback-inner{
+  flex:1;padding:14px;display:flex;flex-direction:column;gap:10px;background:var(--bg);
+}
+.fb-profile{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:12px;display:flex;gap:10px;align-items:center}
+.fb-avatar{width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:#fff;flex-shrink:0}
+.fb-pname{font-size:13px;font-weight:600}
+.fb-psub{font-size:10px;color:var(--text2);font-family:var(--mono);margin-top:2px}
+.fb-alert{background:var(--bg3);border:1px solid rgba(255,107,53,.3);border-radius:8px;padding:11px 13px}
+.fb-alert-title{font-size:11px;font-weight:600;color:#ff6b35;margin-bottom:4px;font-family:var(--mono)}
+.fb-alert-body{font-size:11px;color:var(--text2);line-height:1.65}
+.fb-open{
+  display:block;background:var(--bg3);border:1px solid var(--border2);color:var(--text);
+  text-decoration:none;padding:10px 13px;border-radius:8px;font-size:12px;
+  font-family:var(--mono);text-align:center;transition:all .15s;
+}
+.fb-open:hover{border-color:var(--accent);color:var(--accent)}
+
+/* loading */
+.card-loading{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  height:380px;gap:12px;color:var(--text3);font-size:12px;font-family:var(--mono);
+}
+.spinner{width:22px;height:22px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* card footer */
+.card-footer{
+  padding:6px 12px;border-top:1px solid var(--border);background:var(--bg2);
+  display:flex;align-items:center;justify-content:space-between;flex-shrink:0;
+}
+.cf-time{font-family:var(--mono);font-size:10px;color:var(--text3)}
+.cf-refresh{background:none;border:none;color:var(--text3);cursor:pointer;font-family:var(--mono);font-size:10px;padding:2px 6px;border-radius:3px;transition:color .15s}
+.cf-refresh:hover{color:var(--accent)}
+
+/* ── ADD MODAL ── */
+#modal-overlay,#save-overlay{
+  display:none;position:fixed;inset:0;background:rgba(0,0,0,.78);
+  z-index:1000;align-items:center;justify-content:center;backdrop-filter:blur(4px);
+}
+#modal-overlay.open,#save-overlay.open{display:flex}
+#modal,#save-modal{
+  background:var(--bg2);border:1px solid var(--border2);border-radius:14px;
+  width:460px;max-width:95vw;padding:24px;animation:popIn .2s ease;
+}
+#save-modal{width:360px}
+@keyframes popIn{from{opacity:0;transform:scale(.95)}to{opacity:1;transform:scale(1)}}
+.modal-title{font-size:18px;font-weight:700;margin-bottom:6px;letter-spacing:-.02em}
+.modal-sub{font-size:13px;color:var(--text2);margin-bottom:16px}
+.modal-row{display:flex;gap:8px;margin-bottom:14px}
+#url-input,#board-name-input{
+  background:var(--bg3);border:1px solid var(--border2);color:var(--text);
+  padding:10px 12px;border-radius:8px;font-family:var(--mono);font-size:13px;
+  outline:none;transition:border-color .15s;
+}
+#url-input{flex:1}
+#board-name-input{width:100%;margin-bottom:16px}
+#url-input:focus,#board-name-input:focus{border-color:var(--accent)}
+#url-input::placeholder,#board-name-input::placeholder{color:var(--text3)}
+.modal-add-btn{
+  background:var(--accent);color:#000;border:none;padding:10px 18px;
+  border-radius:8px;font-family:var(--mono);font-size:13px;font-weight:500;cursor:pointer;
+}
+.modal-add-btn:hover{background:#fff}
+.ex-label{font-size:11px;color:var(--text3);font-family:var(--mono);margin-bottom:8px}
+.ex-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px}
+.ex-chip{
+  background:var(--bg3);border:1px solid var(--border);color:var(--text2);
+  padding:4px 10px;border-radius:4px;font-family:var(--mono);font-size:11px;cursor:pointer;transition:all .15s;
+}
+.ex-chip:hover{border-color:var(--accent);color:var(--accent)}
+.modal-foot,.save-foot{display:flex;justify-content:flex-end;gap:8px}
+.cancel-btn{background:transparent;border:1px solid var(--border2);color:var(--text2);padding:8px 16px;border-radius:6px;font-family:var(--mono);font-size:12px;cursor:pointer}
+.cancel-btn:hover{border-color:var(--text2)}
+.confirm-btn{background:var(--accent);color:#000;border:none;padding:8px 20px;border-radius:6px;font-family:var(--mono);font-size:12px;font-weight:500;cursor:pointer}
+.confirm-btn:hover{background:#fff}
+
+/* ── TOAST ── */
+#toast{
+  position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);
+  background:var(--bg3);border:1px solid var(--border2);color:var(--text);
+  padding:10px 20px;border-radius:8px;font-family:var(--mono);font-size:13px;
+  z-index:2000;transition:transform .3s;pointer-events:none;white-space:nowrap;
+}
+#toast.show{transform:translateX(-50%) translateY(0)}
+#toast.success{border-color:var(--accent3);color:var(--accent3)}
+#toast.error{border-color:var(--accent2);color:var(--accent2)}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div id="header">
+  <div id="logo">Side<span>View</span></div>
+  <div id="board-selector">
+    <button id="board-btn" onclick="toggleBoardDD()">📁 <span id="board-label">新しいボード</span> ▾</button>
+    <div id="board-dropdown">
+      <div id="board-list"></div>
+      <button class="board-new-btn" onclick="newBoard()">＋ 新しいボードを作成</button>
+    </div>
+  </div>
+  <div class="spacer"></div>
+  <button id="save-btn" class="hbtn" onclick="openSave()">💾 保存</button>
+  <button id="add-btn" class="hbtn" onclick="openModal()">＋ 追加</button>
+</div>
+
+<!-- TITLE BAR -->
+<div id="title-bar">
+  <input id="board-title-input" type="text" placeholder="ボードのタイトルを入力..." maxlength="60" oninput="onTitleInput()">
+  <span class="title-edit-hint">✏ クリックして編集</span>
+</div>
+
+<!-- MAIN SCROLL -->
+<div id="main">
+  <div id="empty-state" class="show">
+    <div class="big-text">SNSを<span>横並び</span>に<br>表示する</div>
+    <div style="color:var(--text3);font-size:14px;font-family:var(--mono)">URLを追加して比較を始めよう</div>
+    <div class="quick-chips">
+      <div class="quick-chip" onclick="quickAdd('https://x.com/anthropic')">𝕏 Anthropic</div>
+      <div class="quick-chip" onclick="quickAdd('https://x.com/OpenAI')">𝕏 OpenAI</div>
+      <div class="quick-chip" onclick="quickAdd('https://www.youtube.com/@Google')">▶ Google YT</div>
+      <div class="quick-chip" onclick="quickAdd('https://www.instagram.com/nasa/')">📸 NASA</div>
+      <div class="quick-chip" onclick="quickAdd('https://note.com/nikkei')">📝 note</div>
+      <div class="quick-chip" onclick="openModal()">＋ URLを入力</div>
+    </div>
+  </div>
+  <div id="panels-grid"></div>
+</div>
+
+<!-- ADD MODAL -->
+<div id="modal-overlay" onclick="if(event.target===this)closeModal()">
+  <div id="modal">
+    <div class="modal-title">アカウントを追加</div>
+    <div class="modal-sub">SNSアカウントのプロフィールURLを貼り付けてください</div>
+    <div class="modal-row">
+      <input id="url-input" type="text" placeholder="https://x.com/username" onkeydown="if(event.key==='Enter')doAdd()">
+      <button class="modal-add-btn" onclick="doAdd()">追加</button>
+    </div>
+    <div class="ex-label">// クイック追加</div>
+    <div class="ex-chips">
+      <div class="ex-chip" onclick="setUrl('https://x.com/anthropic')">𝕏 @anthropic</div>
+      <div class="ex-chip" onclick="setUrl('https://x.com/OpenAI')">𝕏 @OpenAI</div>
+      <div class="ex-chip" onclick="setUrl('https://x.com/elonmusk')">𝕏 @elonmusk</div>
+      <div class="ex-chip" onclick="setUrl('https://www.youtube.com/@Google')">▶ Google</div>
+      <div class="ex-chip" onclick="setUrl('https://www.youtube.com/@Apple')">▶ Apple</div>
+      <div class="ex-chip" onclick="setUrl('https://www.instagram.com/nasa/')">📸 NASA IG</div>
+      <div class="ex-chip" onclick="setUrl('https://www.instagram.com/natgeo/')">📸 NatGeo</div>
+      <div class="ex-chip" onclick="setUrl('https://note.com/nikkei')">📝 nikkei note</div>
+    </div>
+    <div class="modal-foot">
+      <button class="cancel-btn" onclick="closeModal()">キャンセル</button>
+    </div>
+  </div>
+</div>
+
+<!-- SAVE MODAL -->
+<div id="save-overlay" onclick="if(event.target===this)closeSave()">
+  <div id="save-modal">
+    <div class="modal-title">ボードを保存</div>
+    <input id="board-name-input" type="text" placeholder="例：競合分析ボード" onkeydown="if(event.key==='Enter')doSave()">
+    <div class="save-foot">
+      <button class="cancel-btn" onclick="closeSave()">キャンセル</button>
+      <button class="confirm-btn" onclick="doSave()">保存する</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ── State ──
+let panels = [];
+let boards = JSON.parse(localStorage.getItem('sv_boards') || '[]');
+let currentBoardId = null;
+let boardTitle = '';
+let _twLoaded = false;
+
+// ── Platform helpers ──
+function detect(url) {
+  const u = url.toLowerCase();
+  if (u.includes('x.com') || u.includes('twitter.com')) return 'x';
+  if (u.includes('instagram.com')) return 'instagram';
+  if (u.includes('youtube.com') || u.includes('youtu.be')) return 'youtube';
+  if (u.includes('tiktok.com')) return 'tiktok';
+  if (u.includes('threads.net')) return 'threads';
+  if (u.includes('note.com')) return 'note';
+  return 'generic';
+}
+function extractHandle(url, platform) {
+  try {
+    const parts = new URL(url).pathname.split('/').filter(Boolean);
+    if (platform === 'youtube') return parts.find(p => p.startsWith('@')) || parts[0] || url;
+    return '@' + (parts[0] || '').replace('@', '');
+  } catch { return url; }
+}
+const LABELS   = {x:'X (Twitter)',instagram:'Instagram',youtube:'YouTube',tiktok:'TikTok',threads:'Threads',note:'note',generic:'Web'};
+const ICON_CLS = {x:'sns-x',instagram:'sns-ig',youtube:'sns-yt',tiktok:'sns-tt',threads:'sns-th',note:'sns-note',generic:'sns-gen'};
+const ICON_LBL = {x:'𝕏',instagram:'📸',youtube:'▶',tiktok:'♪',threads:'@',note:'📝',generic:'🌐'};
+const AV_COL   = {x:'#1a1a1a',instagram:'#c13584',youtube:'#ff0000',tiktok:'#010101',threads:'#1a1a1a',note:'#41c9b4',generic:'#333'};
+
+// ── Build card content per platform ──
+function buildContent(panel) {
+  const {platform, url, handle} = panel;
+
+  // X/Twitter — official widget
+  if (platform === 'x') {
+    const tw = (() => { try { return new URL(url).pathname.split('/').filter(Boolean)[0]||''; } catch{return '';} })();
+    return {
+      type: 'twitter', tw,
+      html: `<div class="tw-inner" id="tw-${panel.id}">
+        <a class="twitter-timeline"
+           data-theme="dark"
+           data-chrome="noheader nofooter noborders transparent"
+           href="https://twitter.com/${tw}?ref_src=twsrc%5Etfw">@${tw}のツイート</a>
+      </div>`
+    };
+  }
+
+  // YouTube — official embed
+  if (platform === 'youtube') {
+    const ch = (() => {
+      try {
+        const parts = new URL(url).pathname.split('/').filter(Boolean);
+        return (parts.find(p=>p.startsWith('@'))||parts[0]||'').replace('@','');
+      } catch{return '';}
+    })();
+    return {
+      type: 'iframe_ok',
+      html: `<iframe src="https://www.youtube.com/embed?listType=user_uploads&list=${ch}&rel=0&modestbranding=1" allow="autoplay;encrypted-media;picture-in-picture" allowfullscreen loading="lazy" title="YouTube: ${handle}"></iframe>`
+    };
+  }
+
+  // note — iframe works
+  if (platform === 'note') {
+    return {
+      type: 'iframe_ok',
+      html: `<iframe src="${url}" sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-top-navigation-by-user-activation" loading="lazy" title="note: ${handle}"></iframe>`
+    };
+  }
+
+  // Instagram — blockquote embed (official, shows profile card + posts grid)
+  if (platform === 'instagram') {
+    const igHandle = handle.replace('@','');
+    return {
+      type: 'instagram',
+      igHandle,
+      html: `<div class="ig-wrap">
+        <blockquote class="instagram-media"
+          data-instgrm-permalink="https://www.instagram.com/${igHandle}/"
+          data-instgrm-version="14"
+          style="background:#fff;border:0;margin:0;padding:0;width:100%;min-height:360px;">
+        </blockquote>
+      </div>`
+    };
+  }
+
+  // TikTok — creator embed
+  if (platform === 'tiktok') {
+    const ttHandle = handle.replace('@','');
+    return {
+      type: 'tiktok',
+      html: `<div style="padding:8px;min-height:360px;background:#fff;overflow:auto">
+        <blockquote class="tiktok-embed"
+          cite="https://www.tiktok.com/@${ttHandle}"
+          data-unique-id="${ttHandle}"
+          data-embed-type="creator"
+          style="max-width:100%;min-width:280px">
+          <section><a target="_blank" href="https://www.tiktok.com/@${ttHandle}">@${ttHandle}</a></section>
+        </blockquote>
+      </div>`
+    };
+  }
+
+  // Threads, Generic — iframe with fallback
+  return {
+    type: 'iframe_fallback',
+    html: `<iframe src="${url}" sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-top-navigation-by-user-activation" loading="lazy" title="${handle}" id="iframe-${panel.id}"></iframe>`
+  };
+}
+
+// ── Fallback card ──
+const BLOCK_REASON = {
+  threads: 'ThreadsはX-Frame-Optionsにより外部iframeをブロックしています。',
+  generic: 'このサイトはiframe埋め込みを許可していません。',
+};
+function buildFallback(panel) {
+  const {platform, handle, url} = panel;
+  const initials = handle.replace('@','').slice(0,2).toUpperCase();
+  const reason = BLOCK_REASON[platform] || BLOCK_REASON.generic;
+  return `<div class="fallback-inner">
+    <div class="fb-profile">
+      <div class="fb-avatar" style="background:${AV_COL[platform]||'#333'}">${initials}</div>
+      <div><div class="fb-pname">${handle}</div><div class="fb-psub">${LABELS[platform]||'Web'}</div></div>
+    </div>
+    <div class="fb-alert">
+      <div class="fb-alert-title">⚠ 埋め込みがブロックされました</div>
+      <div class="fb-alert-body">${reason}</div>
+    </div>
+    <a class="fb-open" href="${url}" target="_blank" rel="noopener">
+      ${ICON_LBL[platform]||'🌐'} ${LABELS[platform]||'Web'}で開く →
+    </a>
+  </div>`;
+}
+
+// ── Render all panels as grid ──
+function renderPanels() {
+  const grid = document.getElementById('panels-grid');
+  const empty = document.getElementById('empty-state');
+
+  if (!panels.length) {
+    grid.innerHTML = '';
+    empty.classList.add('show');
+    return;
+  }
+  empty.classList.remove('show');
+
+  grid.innerHTML = panels.map((p, idx) => {
+    const delay = (idx % 4) * 60; // stagger per column
+    return `
+    <div class="panel-card" id="card-${p.id}" style="animation-delay:${delay}ms">
+      <div class="card-header">
+        <div class="sns-icon ${ICON_CLS[p.platform]||'sns-gen'}">${ICON_LBL[p.platform]||'🌐'}</div>
+        <div class="card-handle-info">
+          <div class="card-account">${p.handle}</div>
+          <div class="card-platform">${LABELS[p.platform]||'Web'}</div>
+        </div>
+        <button class="card-close" onclick="removePanel(${p.id})" title="削除">✕</button>
+      </div>
+      <div class="card-content" id="content-${p.id}">
+        <div class="card-loading"><div class="spinner"></div><span>読み込み中...</span></div>
+      </div>
+      <div class="card-footer">
+        <span class="cf-time" id="cftime-${p.id}">—</span>
+        <button class="cf-refresh" onclick="refreshCard(${p.id})">↺ 更新</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  // Load each card staggered
+  panels.forEach((p, i) => {
+    setTimeout(() => loadCard(p), i * 200);
+  });
+}
+
+// ── Load card content ──
+function loadCard(panel) {
+  const el = document.getElementById(`content-${panel.id}`);
+  if (!el) return;
+
+  const c = buildContent(panel);
+  el.innerHTML = c.html;
+
+  if (c.type === 'twitter') {
+    loadTwitterWidget(() => {
+      const wrap = document.getElementById(`tw-${panel.id}`);
+      if (wrap && window.twttr) window.twttr.widgets.load(wrap);
+    });
+  }
+
+  if (c.type === 'instagram') {
+    loadInstagramScript();
+  }
+
+  if (c.type === 'tiktok') {
+    loadTikTokScript();
+  }
+
+  if (c.type === 'iframe_fallback') {
+    const iframe = el.querySelector('iframe');
+    if (iframe) {
+      iframe.addEventListener('load', () => {
+        try {
+          const doc = iframe.contentDocument;
+          if (!doc || !doc.body || doc.body.innerHTML.trim() === '') {
+            showFallback(panel, el);
+          }
+        } catch(e) {
+          if (e instanceof TypeError) showFallback(panel, el);
+          // cross-origin error is normal — site loaded OK
+        }
+      });
+      iframe.addEventListener('error', () => showFallback(panel, el));
+      setTimeout(() => {
+        if (el.dataset.fb) return;
+        try {
+          const doc = iframe.contentDocument;
+          if (!doc || !doc.body || doc.body.innerHTML.trim() === '') showFallback(panel, el);
+        } catch(e) { /* cross-origin = OK */ }
+      }, 8000);
+    }
+  }
+
+  // Update time
+  const tf = document.getElementById(`cftime-${panel.id}`);
+  if (tf) tf.textContent = new Date().toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'}) + ' 更新';
+}
+
+function showFallback(panel, el) {
+  if (!el || el.dataset.fb) return;
+  el.dataset.fb = '1';
+  el.innerHTML = buildFallback(panel);
+}
+
+function refreshCard(id) {
+  const panel = panels.find(p => p.id === id); if (!panel) return;
+  const el = document.getElementById(`content-${id}`); if (!el) return;
+  delete el.dataset.fb;
+  el.innerHTML = `<div class="card-loading"><div class="spinner"></div><span>更新中...</span></div>`;
+  setTimeout(() => loadCard(panel), 400);
+  showToast('更新しました', 'success');
+}
+
+function removePanel(id) {
+  panels = panels.filter(p => p.id !== id);
+  renderPanels();
+  showToast('パネルを削除しました');
+}
+
+// ── Embed scripts ──
+function loadTwitterWidget(cb) {
+  if (_twLoaded && window.twttr) { cb && cb(); return; }
+  if (document.getElementById('twitter-wjs')) {
+    const poll = setInterval(() => {
+      if (window.twttr && window.twttr.widgets) { clearInterval(poll); _twLoaded=true; cb&&cb(); }
+    }, 150);
+    return;
+  }
+  window.twttr = (function(d,s,id){
+    var js,fjs=d.getElementsByTagName(s)[0],t=window.twttr||{};
+    if(d.getElementById(id)) return t;
+    js=d.createElement(s); js.id=id;
+    js.src='https://platform.twitter.com/widgets.js';
+    js.onload=()=>{ _twLoaded=true; cb&&cb(); };
+    fjs.parentNode.insertBefore(js,fjs);
+    t._e=[]; t.ready=function(f){t._e.push(f)}; return t;
+  }(document,'script','twitter-wjs'));
+}
+
+let _igLoaded = false;
+function loadInstagramScript() {
+  if (!document.getElementById('ig-embed-js')) {
+    const s = document.createElement('script');
+    s.id = 'ig-embed-js';
+    s.src = 'https://www.instagram.com/embed.js';
+    s.async = true;
+    s.onload = () => { _igLoaded=true; if(window.instgrm) window.instgrm.Embeds.process(); };
+    document.body.appendChild(s);
+  } else if (window.instgrm) {
+    window.instgrm.Embeds.process();
+  }
+}
+
+function loadTikTokScript() {
+  if (!document.getElementById('tt-embed-js')) {
+    const s = document.createElement('script');
+    s.id = 'tt-embed-js';
+    s.src = 'https://www.tiktok.com/embed.js';
+    s.async = true;
+    document.body.appendChild(s);
+  }
+}
+
+// ── Add panel ──
+function addPanelData(url) {
+  url = url.trim();
+  if (!url) return false;
+  if (!url.startsWith('http')) url = 'https://' + url;
+  if (panels.find(p => p.url === url)) { showToast('すでに追加されています', 'error'); return false; }
+  const platform = detect(url);
+  panels.push({ id: Date.now() + Math.random(), url, platform, handle: extractHandle(url, platform) });
+  renderPanels();
+  return true;
+}
+function quickAdd(url) { if(addPanelData(url)) showToast('パネルを追加しました', 'success'); }
+function doAdd() {
+  const url = document.getElementById('url-input').value.trim();
+  if (!url) { showToast('URLを入力してください', 'error'); return; }
+  if (addPanelData(url)) { closeModal(); showToast('パネルを追加しました', 'success'); }
+}
+function setUrl(url) { document.getElementById('url-input').value=url; document.getElementById('url-input').focus(); }
+
+// ── Title ──
+function onTitleInput() {
+  boardTitle = document.getElementById('board-title-input').value;
+}
+
+// ── Modal ──
+function openModal() { document.getElementById('modal-overlay').classList.add('open'); document.getElementById('url-input').value=''; setTimeout(()=>document.getElementById('url-input').focus(),80); closeBoardDD(); }
+function closeModal() { document.getElementById('modal-overlay').classList.remove('open'); }
+
+// ── Save / Board ──
+function openSave() {
+  if (!panels.length) { showToast('パネルを追加してから保存してください', 'error'); return; }
+  const ex = currentBoardId ? boards.find(b=>b.id===currentBoardId) : null;
+  document.getElementById('board-name-input').value = boardTitle || ex?.name || '';
+  document.getElementById('save-overlay').classList.add('open');
+  setTimeout(()=>document.getElementById('board-name-input').focus(),80);
+}
+function closeSave() { document.getElementById('save-overlay').classList.remove('open'); }
+function doSave() {
+  const name = document.getElementById('board-name-input').value.trim();
+  if (!name) { showToast('ボード名を入力してください', 'error'); return; }
+  boardTitle = name;
+  document.getElementById('board-title-input').value = name;
+  const data = { id: currentBoardId||'b_'+Date.now(), name, panels: JSON.parse(JSON.stringify(panels)) };
+  if (currentBoardId) {
+    const i = boards.findIndex(b=>b.id===currentBoardId);
+    if (i !== -1) boards[i]=data; else boards.push(data);
+  } else {
+    currentBoardId = data.id;
+    boards.push(data);
+  }
+  localStorage.setItem('sv_boards', JSON.stringify(boards));
+  document.getElementById('board-label').textContent = name;
+  closeSave();
+  showToast(`「${name}」を保存しました`, 'success');
+}
+
+function toggleBoardDD() { document.getElementById('board-dropdown').classList.toggle('open'); renderBoardList(); }
+function closeBoardDD() { document.getElementById('board-dropdown').classList.remove('open'); }
+function renderBoardList() {
+  const list = document.getElementById('board-list');
+  if (!boards.length) { list.innerHTML=`<div style="padding:10px 12px;font-size:12px;color:var(--text3);font-family:var(--mono)">保存済みボードなし</div>`; return; }
+  list.innerHTML = boards.map(b=>`
+    <div class="board-item" onclick="loadBoard('${b.id}')">
+      <div><div class="board-name">${b.name}</div><div class="board-count">${b.panels.length} パネル</div></div>
+      <button class="board-delete" onclick="event.stopPropagation();deleteBoard('${b.id}')">✕</button>
+    </div>`).join('');
+}
+function loadBoard(id) {
+  const b = boards.find(b=>b.id===id); if(!b) return;
+  currentBoardId=id; panels=JSON.parse(JSON.stringify(b.panels));
+  boardTitle=b.name;
+  document.getElementById('board-title-input').value=b.name;
+  document.getElementById('board-label').textContent=b.name;
+  renderPanels(); closeBoardDD();
+  showToast(`「${b.name}」を読み込みました`,'success');
+}
+function deleteBoard(id) {
+  boards=boards.filter(b=>b.id!==id);
+  localStorage.setItem('sv_boards',JSON.stringify(boards));
+  renderBoardList(); showToast('ボードを削除しました');
+}
+function newBoard() {
+  panels=[]; currentBoardId=null; boardTitle='';
+  document.getElementById('board-title-input').value='';
+  document.getElementById('board-label').textContent='新しいボード';
+  renderPanels(); closeBoardDD();
+}
+
+// ── Toast ──
+function showToast(msg,type='') {
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.className=['show',type].filter(Boolean).join(' ');
+  clearTimeout(t._t); t._t=setTimeout(()=>t.className='',2500);
+}
+
+// ── Init ──
+document.addEventListener('click', e => { if(!document.getElementById('board-selector').contains(e.target)) closeBoardDD(); });
+if (boards.length) loadBoard(boards[boards.length-1].id); else renderPanels();
+</script>
+</body>
+</html>
